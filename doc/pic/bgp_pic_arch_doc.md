@@ -15,13 +15,15 @@
   - [7.1 Core Local Failure](#71-core-local-failure)
   - [7.2 Core Remote Failure](#72-core-remote-failure)
 - [8 SONIC PIC Edge Call Flow](#8-sonic-pic-edge-call-flow)
-- [9 References](#9-references)
+- [9 FRRouting IPC messaging from BGP to ZEBRA](#9-frrouting-ipc-messaging-from-bgp-to-zebra)
+- [10 References](#10-references)
 
 # Revision
 
 | Rev  |    Date    |       Author        | Change Description                                           |
 |:--:|:--------:|:-----------------:|:------------------------------------------------------------:|
 | 1.0  | Jan 2024 |   Patrice Brissette (Cisco), Eddie Ruan (Alibaba), Donald Sharp (Nvidia), Syed Hasan Raza Naqvi (Broadcom)  | Initial version
+| 1.1  | Jan 2024 |   Philippe Guibert (6WIND) | added BGP changes
 
 # 1 Background
 
@@ -324,6 +326,62 @@ In this scenario, only <b>FAST DOWNLOAD</b> is considered:
 5. syncd gets notified and update SAI/SDK accordingly.
 6. Hardware is finally updated.
 
-# 9 References
+# 9 FRRouting IPC messaging from BGP to ZEBRA
+
+FRRouting IPC messages refer to the specific ZEBRA_ROUTE_ADD and ZEBRA_ROUTE_DELETE messages sent by BGP to ZEBRA to update the IP routing table.
+Each of those messages includes a prefix, and the nexthop from the incoming BGP update. If BGP addpath is configured, and multiple ECMP paths are known,
+the message will include two nexthops.
+
+If a nexthop becomes unreachable, BGP updates the routing entries, by sending a ZEBRA_ROUTE_DELETE message with the corresponding prefix. Two problems are
+identified:
+- There are as many ZEBRA_ROUTE_DELETE messages as there are prefixes. This creates a bottleneck where the many IPC messages will increase the consumed
+memory on both ZEBRA and BGP. Ultimately, this scenario may cause Out of Memory on the processes.
+
+- The BGP convergence time can be defined as the interval between the IGP nexthop notification time at BGP, and the time by when ZEBRA has all the necessary
+information to consider this nexthop unreachable. From BGP perspective, the BGP convergence time ends when the last ZEBRA_ROUTE_DELETE message is sent.
+In the above scenario, the BGP convergence time is dependent of the number of prefixes to be updated.
+
+Some changes are proposed in BGP messaging: nexthops and prefixes will be sent in separate messages. The BGP nexthops will use ZEBRA_NHG_ADD and
+ZEBRA_NHG_DELETE messages: a protocol NH-ID will be reserved by BGP and associated with the nexthop information. The ZEBRA_ROUTE_ADD messages will refer
+to the NH-ID nexthop.
+
+In the above scenario, the BGP convergence time will end when the ZEBRA_NHG_DELETE operation is sent. The expectation is that ZEBRA will handle the
+ZEBRA_NHG_DELETE operation, by removing the corresponding nexthop from the dataplane (which in its turn, will remove the dependent routes from the dataplane).
+It is also expected that the ZEBRA RIB will be updated, i.e. the dependent routes that use that nexthop, will be removed. From  BGP perspective, the
+transmission of this message will invalidate the need to send other ROUTE_DELETE messages.
+
+The following diagram describes the BGP interaction with ZEBRA before and after the proposed changes.
+
+![BGP failover messaging with single nexthop](images/failover_bgp_with_nexthop.png)
+
+__Figure 14: BGP failover messaging with single nexthop__
+
+On an alternate scenario involving ADD-PATH and two ECMP nexthops, the same benefit is brought in. BGP will use three NHG-IDS: one for each
+of the two nexthops, and one parent NHG-ID which groups the two nexthops. At creation, after having sent the two NHG-ID nexthop information, BGP sends
+a ZEBRA_NEXTHOP_GROUP_ADD message to tell about the grouping dependency with the two nexthops. At failover, BGP will update the parent NHG-ID and
+will send a ZEBRA_NEXTHOP_GROUP_ADD message with only the remaining nexthop. Here too, the BGP convergence time will be reduced to one singe operation.
+
+The following diagram describes the BGP interaction with ZEBRA at initialisation, before and after the proposed changes.
+
+![IPC failover messaging with multiple nexthop](images/failover_bgp_with_multiple_nexthop.png)
+
+__Figure 15: BGP failover messaging with multiple nexthop__
+
+From ZEBRA perspective, the handling of the ZEBRA_NEXTHOP_GROUP_ADD message will update the dataplane, by removing the dependency with the failed
+nexthop. The routes of the dataplane will be updated, along with the RIB table. From BGP perspective, there is no need to send extra ZEBRA_ROUTE_ADD
+messages for prefixes using the parent group.
+
+## Impact on ZEBRA design
+
+This design change on BGP impacts ZEBRA:
+
+- In ZEBRA, one must ensure that a separation of NHGs must be done between BGP and the other protocol daemons. The NHG-IDS passed by BGP should only be
+used for BGP prefixes. For instance, when configuring static routes using the same next-hop as BGP uses, the used NHG-ID for STATIC will not be the BGP NHG-ID.
+
+- The BGP design delegates a lot of routing to ZEBRA. For instance, suppressing a NHG-ID will cost nothing for BGP, but will cost a lot for ZEBRA.
+The performance impact on ZEBRA should be evaluated: if there is a rework to be done, the ZEBRA design points will have to be described.
+Note that the route notifications from ZEBRA to BGP will be disabled, by using the 'bgp suppress-fib-pending' command.
+
+# 10 References
 
 - [IETF BGP PIC draft](https://datatracker.ietf.org/doc/draft-ietf-rtgwg-bgp-pic/)
