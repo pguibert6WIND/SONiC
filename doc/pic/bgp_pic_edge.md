@@ -328,7 +328,7 @@ Here is an example of the "show ip route"'s information, which shows two IDs. On
     <figcaption>Figure 6. The output for show ip route.<figcaption>
 </figure> 
 
-The following graph shows pic_nhe, i.e. NHE with forwarding only part. In hardwward forwarding, it is associated with the NHG ID shown in "show ip route".
+The following graph shows pic_nhe, i.e. NHE with forwarding only part. In hardware forwarding, it is associated with the NHG ID shown in "show ip route".
 <figure align=center>
     <img src="images/nhg_pic.png" >
     <figcaption>Figure 7. PIC NHG<figcaption>
