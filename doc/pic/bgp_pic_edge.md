@@ -315,7 +315,7 @@ Route object would use nhe's id as context id and use pic_nhe's id as NHG id.
     <figcaption>Figure 5. Zebra maps forwarding objects to APP DB Objs when BGP PIC enables.<figcaption>
 </figure> 
 
-The following talbe compares the number of forwarding objects created with and without PIC enabled. N is the number of VPN routes and assume all N VPN routes share the same forwarding only part which makes the discussion easy. 
+The following table compares the number of forwarding objects created with and without PIC enabled. N is the number of VPN routes and assume all N VPN routes share the same forwarding only part which makes the discussion easy. 
 | Forwarding Objects | No BGP PIC enabled | BGP PIC enabled |
 |:-----:|:------------------------------------:|:-----------------------------:|
 | Route |  N  | N |
