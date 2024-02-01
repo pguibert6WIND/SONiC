@@ -303,7 +303,7 @@ This function is called by zebra_nhe_find() when pic_nhe is needed, but not gets
       ...
 
 ### Handles kernel forwarding objects
-There is no change for zebra to handle kernel forwarding objects. Only zg_ng is used for NHG programming in kernel. 
+There is no change for zebra to handle kernel forwarding objects. Only zd_ng is used for NHG programming in kernel. 
 
 ### Handles FPM forwarding objects
 #### Map Zebra objects to APP_DB via FPM
